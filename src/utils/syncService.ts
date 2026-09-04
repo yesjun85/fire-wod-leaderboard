@@ -1,4 +1,4 @@
-﻿import { Athlete, AthleteRecord } from '../types';
+import { Athlete, AthleteRecord } from '../types';
 
 export type SyncMessageType = 
   | 'ADD_ATHLETE'
@@ -7,7 +7,10 @@ export type SyncMessageType =
   | 'RESET_RECORD'
   | 'RESET_ALL'
   | 'REQUEST_SYNC'
-  | 'SYNC_STATE';
+  | 'SYNC_STATE'
+  | 'TIMER_START'
+  | 'TIMER_PAUSE'
+  | 'TIMER_RESET';
 
 export interface SyncPayload {
   type: SyncMessageType;
@@ -18,6 +21,9 @@ export interface SyncPayload {
   record?: AthleteRecord;
   records?: Record<string, AthleteRecord>;
   athletes?: Athlete[];
+  targetStartTime?: number;
+  prepSeconds?: number;
+  elapsedSeconds?: number;
 }
 
 export class SyncService {

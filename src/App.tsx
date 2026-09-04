@@ -88,11 +88,14 @@ export default function App() {
   const [records, setRecords] = useState<Record<string, AthleteRecord>>({});
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>(INITIAL_ATHLETES[0].id);
 
-  // 5. Timer state
+  // 5. Timer state (synchronized across all devices via timestamp)
   const [timerStatus, setTimerStatus] = useState<TimerStatus>('idle');
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [prepCountdown, setPrepCountdown] = useState<number>(10);
   const timerIntervalRef = useRef<number | null>(null);
+  const targetStartTimeRef = useRef<number | null>(null);
+  const pausedElapsedRef = useRef<number>(0);
+  const lastTickSecRef = useRef<number>(-1);
 
   // 6. Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -105,6 +108,50 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('fire_wod_athletes', JSON.stringify(athletes));
   }, [athletes]);
+
+  // High-precision synced timer loop
+  const runSyncedTimerLoop = () => {
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+    timerIntervalRef.current = window.setInterval(() => {
+      const targetStart = targetStartTimeRef.current;
+      if (!targetStart) return;
+
+      const now = Date.now();
+
+      if (now < targetStart) {
+        // Preparation countdown phase
+        const remainSec = Math.max(1, Math.ceil((targetStart - now) / 1000));
+        setTimerStatus('countdown');
+        setPrepCountdown(remainSec);
+
+        if (lastTickSecRef.current !== remainSec) {
+          lastTickSecRef.current = remainSec;
+          sound.playCountdownTick(remainSec <= 3);
+        }
+      } else {
+        // Main workout phase
+        const currSec = Math.floor((now - targetStart) / 1000) + pausedElapsedRef.current;
+        
+        // Play start buzzer on transition
+        if (lastTickSecRef.current !== 0) {
+          lastTickSecRef.current = 0;
+          setTimerStatus('running');
+          sound.playStartLongBeep();
+        }
+
+        setElapsedSeconds(currSec);
+
+        // Check time cap
+        if (currSec >= currentWOD.timeCapMinutes * 60) {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+          setTimerStatus('finished');
+          sound.playFinishBuzzer();
+          setIsSirenOpen(true);
+        }
+      }
+    }, 200);
+  };
 
   // Cross-device Real-Time Sync (WebSocket / Cloud PubSub via syncService)
   useEffect(() => {
@@ -139,13 +186,53 @@ export default function App() {
             delete next[payload.athleteId!];
             return next;
           });
+        } else if (payload.type === 'TIMER_START') {
+          // Synchronized timer start triggered by any device
+          if (payload.targetStartTime) {
+            targetStartTimeRef.current = payload.targetStartTime;
+            pausedElapsedRef.current = payload.elapsedSeconds || 0;
+            lastTickSecRef.current = -1;
+            const isCountdown = Date.now() < payload.targetStartTime;
+            setTimerStatus(isCountdown ? 'countdown' : 'running');
+            if (payload.prepSeconds) {
+              setPrepCountdown(payload.prepSeconds);
+            }
+            runSyncedTimerLoop();
+          }
+        } else if (payload.type === 'TIMER_PAUSE') {
+          // Synchronized timer pause
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+          setTimerStatus('paused');
+          if (payload.elapsedSeconds !== undefined) {
+            setElapsedSeconds(payload.elapsedSeconds);
+            pausedElapsedRef.current = payload.elapsedSeconds;
+          }
+        } else if (payload.type === 'TIMER_RESET') {
+          // Synchronized timer reset
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+          targetStartTimeRef.current = null;
+          pausedElapsedRef.current = 0;
+          lastTickSecRef.current = -1;
+          setTimerStatus('idle');
+          setElapsedSeconds(0);
+          setPrepCountdown(settings.prepCountdownSeconds);
+          setRecords({});
         } else if (payload.type === 'REQUEST_SYNC') {
-          // Send current state to newly joined devices
+          // Send current state and timer timestamp to newly joined devices
           setAthletes((currentAthletes) => {
             setRecords((currentRecords) => {
               syncService.broadcast('SYNC_STATE', {
                 athletes: currentAthletes,
-                records: currentRecords
+                records: currentRecords,
+                targetStartTime: targetStartTimeRef.current || undefined,
+                elapsedSeconds,
+                prepSeconds: prepCountdown
               });
               return currentRecords;
             });
@@ -165,6 +252,12 @@ export default function App() {
               ...payload.records
             }));
           }
+          // Catch up to active timer
+          if (payload.targetStartTime && timerStatus === 'idle') {
+            targetStartTimeRef.current = payload.targetStartTime;
+            pausedElapsedRef.current = payload.elapsedSeconds || 0;
+            runSyncedTimerLoop();
+          }
         }
       },
       (connected) => {
@@ -177,6 +270,7 @@ export default function App() {
 
     return () => {
       syncService.cleanup();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, [roomId]);
 
@@ -195,82 +289,77 @@ export default function App() {
     handleSaveSettings({ ...settings, soundEnabled: updated });
   };
 
-  // Timer controls
-  const startTimer = () => {
+  // Synchronized Timer controls (broadcasts to all participants)
+  const startTimer = (broadcast: boolean = true) => {
     if (timerStatus === 'running') return;
 
     if (timerStatus === 'idle') {
       const prepSec = settings.prepCountdownSeconds;
-      if (prepSec > 0) {
-        setTimerStatus('countdown');
-        setPrepCountdown(prepSec);
-        sound.playCountdownTick(false);
+      const targetStartTime = Date.now() + (prepSec * 1000);
+      targetStartTimeRef.current = targetStartTime;
+      pausedElapsedRef.current = 0;
+      lastTickSecRef.current = -1;
 
-        let count = prepSec;
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      setTimerStatus(prepSec > 0 ? 'countdown' : 'running');
+      setPrepCountdown(prepSec);
 
-        timerIntervalRef.current = window.setInterval(() => {
-          count -= 1;
-          if (count > 0) {
-            setPrepCountdown(count);
-            sound.playCountdownTick(count <= 3);
-          } else {
-            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-            setTimerStatus('running');
-            sound.playStartLongBeep();
-            runWorkoutClock();
-          }
-        }, 1000);
-      } else {
-        setTimerStatus('running');
-        sound.playStartLongBeep();
-        runWorkoutClock();
+      if (broadcast) {
+        syncService.broadcast('TIMER_START', {
+          targetStartTime,
+          prepSeconds: prepSec,
+          elapsedSeconds: 0
+        });
       }
+
+      runSyncedTimerLoop();
     } else if (timerStatus === 'paused') {
+      const targetStartTime = Date.now();
+      targetStartTimeRef.current = targetStartTime;
+      lastTickSecRef.current = 0;
       setTimerStatus('running');
-      runWorkoutClock();
+
+      if (broadcast) {
+        syncService.broadcast('TIMER_START', {
+          targetStartTime,
+          prepSeconds: 0,
+          elapsedSeconds: pausedElapsedRef.current
+        });
+      }
+
+      runSyncedTimerLoop();
     }
   };
 
-  const runWorkoutClock = () => {
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    timerIntervalRef.current = window.setInterval(() => {
-      setElapsedSeconds((prev) => {
-        const next = prev + 1;
-        // Check Time Cap
-        if (next >= currentWOD.timeCapMinutes * 60) {
-          pauseTimer();
-          setTimerStatus('finished');
-          sound.playFinishBuzzer();
-          setIsSirenOpen(true);
-        }
-        return next;
-      });
-    }, 1000);
-  };
-
-  const pauseTimer = () => {
+  const pauseTimer = (broadcast: boolean = true) => {
     setTimerStatus('paused');
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
+    pausedElapsedRef.current = elapsedSeconds;
+
+    if (broadcast) {
+      syncService.broadcast('TIMER_PAUSE', { elapsedSeconds });
+    }
   };
 
-  const resetTimer = () => {
-    pauseTimer();
+  const resetTimer = (broadcast: boolean = true) => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    targetStartTimeRef.current = null;
+    pausedElapsedRef.current = 0;
+    lastTickSecRef.current = -1;
     setTimerStatus('idle');
     setElapsedSeconds(0);
     setPrepCountdown(settings.prepCountdownSeconds);
     setRecords({});
-  };
 
-  // Clear timer on unmount
-  useEffect(() => {
-    return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    };
-  }, []);
+    if (broadcast) {
+      syncService.broadcast('TIMER_RESET', {});
+    }
+  };
 
   // Athlete record update & complete
   const handleAthleteComplete = (athleteId: string, timeSecs?: number) => {
@@ -442,6 +531,7 @@ export default function App() {
             wod={currentWOD}
             timerStatus={timerStatus}
             elapsedSeconds={elapsedSeconds}
+            prepCountdown={prepCountdown}
             athletes={athletes}
             records={records}
             selectedAthleteId={selectedAthleteId}
@@ -449,6 +539,9 @@ export default function App() {
             onAthleteComplete={handleAthleteComplete}
             onAthleteReset={handleAthleteReset}
             onUpdateAmrapScore={handleUpdateAmrapScore}
+            onStartTimer={startTimer}
+            onPauseTimer={pauseTimer}
+            onResetTimer={resetTimer}
           />
         )}
       </main>

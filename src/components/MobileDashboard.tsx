@@ -14,13 +14,16 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
-  Rows3
+  Rows3,
+  Play,
+  Pause
 } from 'lucide-react';
 
 interface MobileDashboardProps {
   wod: WODDetails;
   timerStatus: TimerStatus;
   elapsedSeconds: number;
+  prepCountdown?: number;
   athletes: Athlete[];
   records: Record<string, AthleteRecord>;
   selectedAthleteId: string;
@@ -28,12 +31,16 @@ interface MobileDashboardProps {
   onAthleteComplete: (athleteId: string, timeSecs?: number) => void;
   onAthleteReset: (athleteId: string) => void;
   onUpdateAmrapScore: (athleteId: string, deltaRounds: number, deltaReps: number) => void;
+  onStartTimer?: () => void;
+  onPauseTimer?: () => void;
+  onResetTimer?: () => void;
 }
 
 export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   wod,
   timerStatus,
   elapsedSeconds,
+  prepCountdown = 10,
   athletes,
   records,
   selectedAthleteId,
@@ -41,6 +48,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   onAthleteComplete,
   onAthleteReset,
   onUpdateAmrapScore,
+  onStartTimer,
+  onPauseTimer,
+  onResetTimer
 }) => {
   const currentAthlete = athletes.find(a => a.id === selectedAthleteId) || athletes[0];
   const myRecord = currentAthlete ? records[currentAthlete.id] : undefined;
@@ -201,7 +211,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       </div>
 
       {/* 2. SYNCED TIMER & STATUS CARD - HIGH DENSITY HUD */}
-      <div className="bg-[#0a0f19] rounded-xl p-3 sm:p-4 border border-slate-700/80 text-center relative overflow-hidden shadow-lg bg-tactical-grid">
+      <div className="bg-[#0a0f19] rounded-xl p-3 sm:p-4 border border-slate-700/80 text-center relative overflow-hidden shadow-lg bg-tactical-grid space-y-2">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
           <span className="font-mono font-bold text-orange-400 uppercase text-[11px]">
             {wod.format === 'FOR_TIME' ? 'FOR TIME 훈련' : 'AMRAP 서킷'}
@@ -211,11 +221,93 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
           </span>
         </div>
 
-        {/* Big Synced Clock */}
-        <div className="py-1">
-          <span className="font-['Orbitron',sans-serif] font-black text-5xl sm:text-6xl tabular-nums tracking-tight text-white select-none drop-shadow-[0_0_20px_rgba(255,87,34,0.3)]">
-            {formatTime(elapsedSeconds)}
-          </span>
+        {/* Big Synced Clock or Countdown */}
+        {timerStatus === 'countdown' ? (
+          <div className="py-2 bg-amber-950/40 rounded-xl border border-amber-500/50 animate-pulse">
+            <span className="text-xs font-mono font-bold uppercase text-amber-400 block mb-0.5">
+              ⚠️ 전원 작전 투입 준비 중
+            </span>
+            <span className="font-['Orbitron',sans-serif] font-black text-6xl text-amber-400 tabular-nums">
+              {prepCountdown}
+            </span>
+            <span className="text-[10px] font-mono text-amber-300 block mt-0.5">
+              전체 화면 동시 카운트다운 진행 중
+            </span>
+          </div>
+        ) : (
+          <div className="py-1">
+            <span className={`font-['Orbitron',sans-serif] font-black text-5xl sm:text-6xl tabular-nums tracking-tight select-none drop-shadow-[0_0_20px_rgba(255,87,34,0.3)] ${
+              timerStatus === 'running' 
+                ? 'text-white' 
+                : timerStatus === 'paused' 
+                  ? 'text-amber-400 animate-pulse' 
+                  : 'text-slate-400'
+            }`}>
+              {formatTime(elapsedSeconds)}
+            </span>
+          </div>
+        )}
+
+        {/* Real-time Synchronized Control Buttons */}
+        <div className="pt-1">
+          {timerStatus === 'idle' && onStartTimer && (
+            <button
+              id="mobile-start-timer-btn"
+              onClick={onStartTimer}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-['Black_Han_Sans',sans-serif] text-lg sm:text-xl shadow-lg shadow-emerald-950 border border-emerald-400/60 flex items-center justify-center gap-2 cursor-pointer transition-all"
+            >
+              <Play className="w-5 h-5 fill-white" />
+              <span>전원 동시 운동 시작 (10초 준비)</span>
+            </button>
+          )}
+
+          {timerStatus === 'running' && onPauseTimer && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={onPauseTimer}
+                className="py-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+              >
+                <Pause className="w-4 h-4" />
+                <span>일시정지</span>
+              </button>
+              <button
+                onClick={onResetTimer}
+                className="py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>전체 초기화</span>
+              </button>
+            </div>
+          )}
+
+          {timerStatus === 'paused' && onStartTimer && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={onStartTimer}
+                className="py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>운동 재개</span>
+              </button>
+              <button
+                onClick={onResetTimer}
+                className="py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>전체 초기화</span>
+              </button>
+            </div>
+          )}
+
+          {timerStatus === 'finished' && onResetTimer && (
+            <button
+              onClick={onResetTimer}
+              className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>새 작전 준비 (타이머 초기화)</span>
+            </button>
+          )}
         </div>
 
         {/* Live Rank Pill */}
