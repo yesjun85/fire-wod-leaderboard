@@ -1,0 +1,6 @@
+{
+  "name": "파이어 WOD: 골든타임 리더보드",
+  "description": "소방관 체력단련 WOD 보드 - TV 대형 전광판 및 모바일 듀얼 모드, Web Audio 비프음 타이머, 실시간 리더보드, 커피 당번 사이렌 연출, Gemini AI 전술 WOD 생성",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
