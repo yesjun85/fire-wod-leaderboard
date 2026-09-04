@@ -16,6 +16,7 @@ interface MobileJoinViewProps {
   wod: WODDetails;
   stationName: string;
   athletes: Athlete[];
+  roomId?: string;
   onAddAthlete: (athlete: Athlete) => void;
   onSelectAthlete: (athleteId: string) => void;
   onGoToMobile: () => void;
@@ -26,6 +27,7 @@ export const MobileJoinView: React.FC<MobileJoinViewProps> = ({
   wod,
   stationName,
   athletes,
+  roomId = 'wod-119',
   onAddAthlete,
   onSelectAthlete,
   onGoToMobile,
@@ -78,12 +80,15 @@ export const MobileJoinView: React.FC<MobileJoinViewProps> = ({
         <div className="flex items-center justify-center gap-2 text-orange-400 font-mono text-[11px] uppercase tracking-wider mb-1">
           <Shield className="w-4 h-4 text-orange-400" />
           <span>{stationName}</span>
+          <span className="bg-orange-600/30 text-orange-300 px-2 py-0.5 rounded border border-orange-500/40 text-[10px]">
+            📡 동기화 방: {roomId}
+          </span>
         </div>
         <h1 className="font-['Black_Han_Sans',sans-serif] text-2xl text-slate-100 tracking-wide">
           119 대원 출동 참가 등록
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          휴대폰에서 등록하면 체력단련실 TV 전광판 순위표에 즉시 반영됩니다.
+          휴대폰에서 등록하면 체력단련실 TV 전광판 및 다른 참가자의 화면에 <strong className="text-emerald-400">즉시 실시간 반영</strong>됩니다.
         </p>
 
         {/* Current WOD Badge */}

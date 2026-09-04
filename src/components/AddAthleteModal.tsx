@@ -22,6 +22,7 @@ interface AddAthleteModalProps {
   athletes: Athlete[];
   onAddAthlete: (athlete: Athlete) => void;
   onRemoveAthlete: (athleteId: string) => void;
+  roomId?: string;
 }
 
 export const AddAthleteModal: React.FC<AddAthleteModalProps> = ({
@@ -29,7 +30,8 @@ export const AddAthleteModal: React.FC<AddAthleteModalProps> = ({
   onClose,
   athletes,
   onAddAthlete,
-  onRemoveAthlete
+  onRemoveAthlete,
+  roomId = 'wod-119'
 }) => {
   const [activeTab, setActiveTab] = useState<'qr' | 'manual' | 'list'>('qr');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -47,7 +49,7 @@ export const AddAthleteModal: React.FC<AddAthleteModalProps> = ({
   // Compute join URL and generate QR code
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
-      const url = `${window.location.origin}${window.location.pathname}?mode=join`;
+      const url = `${window.location.origin}${window.location.pathname}?mode=join&room=${encodeURIComponent(roomId)}`;
       setJoinUrl(url);
 
       QRCode.toDataURL(url, {
@@ -176,9 +178,10 @@ export const AddAthleteModal: React.FC<AddAthleteModalProps> = ({
           {activeTab === 'qr' && (
             <div className="space-y-4 text-center">
               
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-mono font-bold">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-mono font-bold">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>카메라로 비추면 즉시 대원 등록 페이지로 이동</span>
+                <span className="bg-orange-600 text-white px-1.5 py-0.5 rounded text-[10px]">방: {roomId}</span>
               </div>
 
               {/* QR Code Container with Tactical HUD Frame */}

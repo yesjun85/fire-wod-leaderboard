@@ -11,6 +11,7 @@ import { StandaloneExporterModal } from './components/StandaloneExporterModal';
 import { MobileJoinView } from './components/MobileJoinView';
 import { PRESET_WODS } from './utils/gemini';
 import { sound } from './utils/audio';
+import { syncService, SyncPayload } from './utils/syncService';
 
 const INITIAL_ATHLETES: Athlete[] = [
   { id: 'ath-1', name: '김반장', rank: '소방위', color: '#f97316' },
@@ -21,6 +22,23 @@ const INITIAL_ATHLETES: Athlete[] = [
 ];
 
 export default function App() {
+  // 0. Real-time Room ID (shared across all devices via QR code)
+  const [roomId, setRoomId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room');
+      if (urlRoom && urlRoom.trim()) {
+        localStorage.setItem('fire_wod_room_id', urlRoom.trim());
+        return urlRoom.trim();
+      }
+      const savedRoom = localStorage.getItem('fire_wod_room_id');
+      if (savedRoom && savedRoom.trim()) return savedRoom.trim();
+    }
+    return 'wod-119';
+  });
+
+  const [isSyncConnected, setIsSyncConnected] = useState<boolean>(true);
+
   // 1. Settings state with localStorage persistence
   const [settings, setSettings] = useState<AppSettings>(() => {
     const savedKey = localStorage.getItem('fire_wod_gemini_key') || '';
@@ -33,7 +51,8 @@ export default function App() {
       stationName: savedStation,
       soundEnabled: savedSound,
       soundVolume: savedVol,
-      prepCountdownSeconds: savedPrep
+      prepCountdownSeconds: savedPrep,
+      roomId
     };
   });
 
@@ -82,66 +101,84 @@ export default function App() {
   const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false);
   const [isExporterOpen, setIsExporterOpen] = useState(false);
 
-  // Persist athletes
+  // Persist athletes locally
   useEffect(() => {
     localStorage.setItem('fire_wod_athletes', JSON.stringify(athletes));
   }, [athletes]);
 
-  // Real-time synchronization across browser tabs (BroadcastChannel)
+  // Cross-device Real-Time Sync (WebSocket / Cloud PubSub via syncService)
   useEffect(() => {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
-    const channel = new BroadcastChannel('fire_wod_channel');
-    channel.onmessage = (event) => {
-      if (event.data?.type === 'ADD_ATHLETE' && event.data.athlete) {
-        setAthletes((prev) => {
-          if (prev.some((a) => a.id === event.data.athlete.id)) return prev;
-          return [...prev, event.data.athlete];
-        });
-      } else if (event.data?.type === 'REMOVE_ATHLETE' && event.data.athleteId) {
-        setAthletes((prev) => prev.filter((a) => a.id !== event.data.athleteId));
-      }
-    };
-    return () => {
-      channel.close();
-    };
-  }, []);
-
-  // Real-time synchronization across network devices via API polling
-  useEffect(() => {
-    let isMounted = true;
-    const syncWithServer = async () => {
-      try {
-        const res = await fetch('/api/athletes');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0 && isMounted) {
+    syncService.init(
+      roomId,
+      (payload: SyncPayload) => {
+        if (payload.type === 'ADD_ATHLETE' && payload.athlete) {
+          const newAth = payload.athlete;
           setAthletes((prev) => {
-            const existingIds = new Set(prev.map((a) => a.id));
-            const existingNames = new Set(prev.map((a) => `${a.rank}-${a.name}`));
-            const toAdd: Athlete[] = [];
-            for (const item of data) {
-              if (!existingIds.has(item.id) && !existingNames.has(`${item.rank}-${item.name}`)) {
-                toAdd.push(item);
-              }
+            if (prev.some((a) => a.id === newAth.id || (a.name === newAth.name && a.rank === newAth.rank))) {
+              return prev;
             }
-            if (toAdd.length > 0) {
-              return [...prev, ...toAdd];
-            }
-            return prev;
+            return [...prev, newAth];
           });
+          sound.playCountdownTick(false);
+        } else if (payload.type === 'REMOVE_ATHLETE' && payload.athleteId) {
+          setAthletes((prev) => prev.filter((a) => a.id !== payload.athleteId));
+          setRecords((prev) => {
+            const next = { ...prev };
+            delete next[payload.athleteId!];
+            return next;
+          });
+        } else if (payload.type === 'UPDATE_RECORD' && payload.record) {
+          const rec = payload.record;
+          setRecords((prev) => ({
+            ...prev,
+            [rec.athleteId]: rec
+          }));
+        } else if (payload.type === 'RESET_RECORD' && payload.athleteId) {
+          setRecords((prev) => {
+            const next = { ...prev };
+            delete next[payload.athleteId!];
+            return next;
+          });
+        } else if (payload.type === 'REQUEST_SYNC') {
+          // Send current state to newly joined devices
+          setAthletes((currentAthletes) => {
+            setRecords((currentRecords) => {
+              syncService.broadcast('SYNC_STATE', {
+                athletes: currentAthletes,
+                records: currentRecords
+              });
+              return currentRecords;
+            });
+            return currentAthletes;
+          });
+        } else if (payload.type === 'SYNC_STATE') {
+          if (payload.athletes && payload.athletes.length > 0) {
+            setAthletes((prev) => {
+              const map = new Map(prev.map((a) => [a.id, a]));
+              payload.athletes!.forEach((a) => map.set(a.id, a));
+              return Array.from(map.values());
+            });
+          }
+          if (payload.records && Object.keys(payload.records).length > 0) {
+            setRecords((prev) => ({
+              ...prev,
+              ...payload.records
+            }));
+          }
         }
-      } catch {
-        // Fallback for static environments
+      },
+      (connected) => {
+        setIsSyncConnected(connected);
       }
-    };
+    );
 
-    syncWithServer();
-    const interval = setInterval(syncWithServer, 2500);
+    // Initial broadcast to request state from any active screen in this room
+    syncService.broadcast('REQUEST_SYNC', {});
+
     return () => {
-      isMounted = false;
-      clearInterval(interval);
+      syncService.cleanup();
     };
-  }, []);
+  }, [roomId]);
 
   // Save Settings handler
   const handleSaveSettings = (newSettings: AppSettings) => {
@@ -238,17 +275,19 @@ export default function App() {
   // Athlete record update & complete
   const handleAthleteComplete = (athleteId: string, timeSecs?: number) => {
     const finalTime = timeSecs !== undefined ? timeSecs : elapsedSeconds;
+    const newRecord: AthleteRecord = {
+      athleteId,
+      completed: true,
+      timeSeconds: finalTime,
+      rounds: records[athleteId]?.rounds || 1,
+      extraReps: records[athleteId]?.extraReps || 0,
+      submittedAt: Date.now()
+    };
+
     setRecords((prev) => {
       const updated = {
         ...prev,
-        [athleteId]: {
-          athleteId,
-          completed: true,
-          timeSeconds: finalTime,
-          rounds: prev[athleteId]?.rounds || 1,
-          extraReps: prev[athleteId]?.extraReps || 0,
-          submittedAt: Date.now()
-        }
+        [athleteId]: newRecord
       };
 
       // Check if all athletes finished
@@ -264,6 +303,9 @@ export default function App() {
 
       return updated;
     });
+
+    // Real-time broadcast to TV and all other smartphones
+    syncService.broadcast('UPDATE_RECORD', { record: newRecord });
   };
 
   const handleAthleteReset = (athleteId: string) => {
@@ -272,6 +314,7 @@ export default function App() {
       delete next[athleteId];
       return next;
     });
+    syncService.broadcast('RESET_RECORD', { athleteId });
   };
 
   const handleUpdateAmrapScore = (athleteId: string, deltaRounds: number, deltaReps: number) => {
@@ -279,14 +322,19 @@ export default function App() {
       const current = prev[athleteId] || { athleteId, completed: false, rounds: 0, extraReps: 0 };
       const newRounds = Math.max(0, (current.rounds || 0) + deltaRounds);
       const newReps = Math.max(0, (current.extraReps || 0) + deltaReps);
+      const updatedRec: AthleteRecord = {
+        ...current,
+        rounds: newRounds,
+        extraReps: newReps,
+        submittedAt: Date.now()
+      };
+
+      // Broadcast AMRAP score update
+      syncService.broadcast('UPDATE_RECORD', { record: updatedRec });
+
       return {
         ...prev,
-        [athleteId]: {
-          ...current,
-          rounds: newRounds,
-          extraReps: newReps,
-          submittedAt: Date.now()
-        }
+        [athleteId]: updatedRec
       };
     });
   };
@@ -294,20 +342,16 @@ export default function App() {
   // Athlete roster management with cross-tab and cross-device sync
   const handleAddAthlete = (newAth: Athlete) => {
     setAthletes((prev) => {
-      if (prev.some((a) => a.id === newAth.id)) return prev;
+      if (prev.some((a) => a.id === newAth.id || (a.name === newAth.name && a.rank === newAth.rank))) {
+        return prev;
+      }
       return [...prev, newAth];
     });
 
-    // Broadcast across tabs
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        const channel = new BroadcastChannel('fire_wod_channel');
-        channel.postMessage({ type: 'ADD_ATHLETE', athlete: newAth });
-        channel.close();
-      }
-    } catch {}
+    // 1. Broadcast across all smartphones, tablets, and PC screens via cloud sync
+    syncService.broadcast('ADD_ATHLETE', { athlete: newAth });
 
-    // Synchronize to server API for cross-device phones
+    // 2. Local fallback
     try {
       fetch('/api/athletes', {
         method: 'POST',
@@ -325,16 +369,9 @@ export default function App() {
       return copy;
     });
 
-    // Broadcast across tabs
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        const channel = new BroadcastChannel('fire_wod_channel');
-        channel.postMessage({ type: 'REMOVE_ATHLETE', athleteId });
-        channel.close();
-      }
-    } catch {}
+    // Broadcast removal across all devices
+    syncService.broadcast('REMOVE_ATHLETE', { athleteId });
 
-    // Remove from server API
     try {
       fetch(`/api/athletes?id=${encodeURIComponent(athleteId)}`, {
         method: 'DELETE'
@@ -358,6 +395,8 @@ export default function App() {
         stationName={settings.stationName}
         hasGeminiKey={Boolean(settings.geminiApiKey.trim())}
         soundEnabled={settings.soundEnabled}
+        roomId={roomId}
+        isSyncConnected={isSyncConnected}
         onToggleSound={handleToggleSound}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAIModal={() => setIsAIModalOpen(true)}
@@ -372,6 +411,7 @@ export default function App() {
             wod={currentWOD}
             stationName={settings.stationName}
             athletes={athletes}
+            roomId={roomId}
             onAddAthlete={handleAddAthlete}
             onSelectAthlete={(id) => {
               setSelectedAthleteId(id);
@@ -468,6 +508,7 @@ export default function App() {
         isOpen={isAddAthleteOpen}
         onClose={() => setIsAddAthleteOpen(false)}
         athletes={athletes}
+        roomId={roomId}
         onAddAthlete={handleAddAthlete}
         onRemoveAthlete={handleRemoveAthlete}
       />

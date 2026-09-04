@@ -9,7 +9,8 @@ import {
   VolumeX, 
   Sparkles, 
   Code2, 
-  ShieldAlert
+  ShieldAlert,
+  Radio
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -18,6 +19,8 @@ interface NavbarProps {
   stationName: string;
   hasGeminiKey: boolean;
   soundEnabled: boolean;
+  roomId?: string;
+  isSyncConnected?: boolean;
   onToggleSound: () => void;
   onOpenSettings: () => void;
   onOpenAIModal: () => void;
@@ -31,6 +34,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   stationName,
   hasGeminiKey,
   soundEnabled,
+  roomId = 'wod-119',
+  isSyncConnected = true,
   onToggleSound,
   onOpenSettings,
   onOpenAIModal,
@@ -50,6 +55,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="font-['Black_Han_Sans',sans-serif] tracking-wider text-lg sm:text-xl text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-red-400">
                 파이어 WOD
+              </span>
+              <span 
+                className={`hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  isSyncConnected 
+                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40' 
+                    : 'bg-amber-950/60 text-amber-400 border-amber-500/40 animate-pulse'
+                }`}
+                title={`전국 스마트폰/PC 실시간 동기화 방: ${roomId}`}
+              >
+                <Radio className="w-2.5 h-2.5 animate-pulse" />
+                <span>{roomId}</span>
               </span>
             </div>
             <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[140px] sm:max-w-[220px]">

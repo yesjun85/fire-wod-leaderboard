@@ -46,4 +46,5 @@ export interface AppSettings {
   soundEnabled: boolean;
   soundVolume: number; // 0.0 to 1.0
   prepCountdownSeconds: number; // default 10s
+  roomId?: string; // Real-time room identifier
 }
