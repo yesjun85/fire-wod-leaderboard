@@ -16,7 +16,8 @@ import {
   LayoutGrid,
   Rows3,
   Play,
-  Pause
+  Pause,
+  Trash2
 } from 'lucide-react';
 
 interface MobileDashboardProps {
@@ -30,6 +31,7 @@ interface MobileDashboardProps {
   onSelectAthlete: (id: string) => void;
   onAthleteComplete: (athleteId: string, timeSecs?: number) => void;
   onAthleteReset: (athleteId: string) => void;
+  onRemoveAthlete?: (athleteId: string) => void;
   onUpdateAmrapScore: (athleteId: string, deltaRounds: number, deltaReps: number) => void;
   onStartTimer?: () => void;
   onPauseTimer?: () => void;
@@ -47,6 +49,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   onSelectAthlete,
   onAthleteComplete,
   onAthleteReset,
+  onRemoveAthlete,
   onUpdateAmrapScore,
   onStartTimer,
   onPauseTimer,
@@ -340,10 +343,25 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         {wod.format === 'FOR_TIME' ? (
           /* FOR TIME MODE: GIANT ONE-TOUCH FINISH BUTTON */
           <div className="space-y-2.5">
-            <div className="text-center">
-              <span className="text-[11px] font-mono font-bold uppercase text-slate-400 tracking-wider">
+            <div className="flex items-center justify-between text-slate-400 pb-1 border-b border-slate-800/80">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-300">
                 {currentAthlete?.name} {currentAthlete?.rank} 대원 작전 기록
               </span>
+              {onRemoveAthlete && currentAthlete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`'${currentAthlete.name}' 대원을 참가 명단에서 삭제하시겠습니까?`)) {
+                      onRemoveAthlete(currentAthlete.id);
+                    }
+                  }}
+                  className="text-[11px] font-mono text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors px-2 py-0.5 rounded hover:bg-red-950/30 border border-slate-800 hover:border-red-800/40 cursor-pointer"
+                  title="이 대원 명단에서 삭제"
+                >
+                  <Trash2 className="w-3 h-3 text-red-400" />
+                  <span>대원 삭제</span>
+                </button>
+              )}
             </div>
 
             {isCompleted ? (
@@ -385,10 +403,25 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         ) : (
           /* AMRAP MODE: GIANT ROUND & REP COUNTERS */
           <div className="space-y-3">
-            <div className="text-center">
-              <span className="text-[11px] font-mono font-bold uppercase text-slate-400 tracking-wider">
-                {currentAthlete?.name} 대원 라운드 카운터
+            <div className="flex items-center justify-between text-slate-400 pb-1 border-b border-slate-800/80">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-300">
+                {currentAthlete?.name} {currentAthlete?.rank} 대원 라운드 카운터
               </span>
+              {onRemoveAthlete && currentAthlete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`'${currentAthlete.name}' 대원을 참가 명단에서 삭제하시겠습니까?`)) {
+                      onRemoveAthlete(currentAthlete.id);
+                    }
+                  }}
+                  className="text-[11px] font-mono text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors px-2 py-0.5 rounded hover:bg-red-950/30 border border-slate-800 hover:border-red-800/40 cursor-pointer"
+                  title="이 대원 명단에서 삭제"
+                >
+                  <Trash2 className="w-3 h-3 text-red-400" />
+                  <span>대원 삭제</span>
+                </button>
+              )}
             </div>
 
             {/* Current Score Display */}

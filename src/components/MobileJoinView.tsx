@@ -9,7 +9,8 @@ import {
   Users, 
   Tv, 
   Smartphone,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 
 interface MobileJoinViewProps {
@@ -19,6 +20,7 @@ interface MobileJoinViewProps {
   roomId?: string;
   onAddAthlete: (athlete: Athlete) => void;
   onSelectAthlete: (athleteId: string) => void;
+  onRemoveAthlete?: (athleteId: string) => void;
   onGoToMobile: () => void;
   onGoToTV: () => void;
 }
@@ -30,6 +32,7 @@ export const MobileJoinView: React.FC<MobileJoinViewProps> = ({
   roomId = 'wod-119',
   onAddAthlete,
   onSelectAthlete,
+  onRemoveAthlete,
   onGoToMobile,
   onGoToTV
 }) => {
@@ -228,18 +231,37 @@ export const MobileJoinView: React.FC<MobileJoinViewProps> = ({
           </p>
           <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 rounded-lg bg-[#080c14] border border-slate-800">
             {athletes.map((ath) => (
-              <button
+              <div
                 key={ath.id}
-                type="button"
-                onClick={() => {
-                  onSelectAthlete(ath.id);
-                  onGoToMobile();
-                }}
-                className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-mono text-xs flex items-center gap-1 transition-all"
+                className="inline-flex items-center rounded-md bg-slate-900 border border-slate-700 overflow-hidden"
               >
-                <span>{ath.name}</span>
-                <span className="text-[10px] text-slate-400">({ath.rank})</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectAthlete(ath.id);
+                    onGoToMobile();
+                  }}
+                  className="px-2.5 py-1 text-slate-200 hover:bg-slate-800 font-mono text-xs flex items-center gap-1 transition-all"
+                >
+                  <span className="font-bold">{ath.name}</span>
+                  <span className="text-[10px] text-slate-400">({ath.rank})</span>
+                </button>
+                {onRemoveAthlete && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`'${ath.name}' 대원을 참가 명단에서 삭제하시겠습니까?`)) {
+                        onRemoveAthlete(ath.id);
+                      }
+                    }}
+                    className="px-1.5 py-1 text-slate-500 hover:text-red-400 hover:bg-red-950/40 border-l border-slate-800 transition-colors cursor-pointer"
+                    title={`${ath.name} 대원 삭제`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </div>

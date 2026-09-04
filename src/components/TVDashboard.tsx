@@ -15,7 +15,8 @@ import {
   Clock,
   Zap,
   QrCode,
-  Smartphone
+  Smartphone,
+  Trash2
 } from 'lucide-react';
 
 interface TVDashboardProps {
@@ -30,6 +31,7 @@ interface TVDashboardProps {
   onResetTimer: () => void;
   onAthleteComplete: (athleteId: string) => void;
   onAthleteReset: (athleteId: string) => void;
+  onRemoveAthlete: (athleteId: string) => void;
   onOpenAddAthlete: () => void;
   onOpenAIModal: () => void;
   onTriggerAlarm: () => void;
@@ -47,6 +49,7 @@ export const TVDashboard: React.FC<TVDashboardProps> = ({
   onResetTimer,
   onAthleteComplete,
   onAthleteReset,
+  onRemoveAthlete,
   onOpenAddAthlete,
   onOpenAIModal,
   onTriggerAlarm
@@ -435,6 +438,20 @@ export const TVDashboard: React.FC<TVDashboardProps> = ({
                         완료
                       </button>
                     )}
+
+                    {/* Delete Athlete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`'${athlete.name}' 대원을 참가 명단에서 삭제하시겠습니까?`)) {
+                          onRemoveAthlete(athlete.id);
+                        }
+                      }}
+                      className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-950/40 border border-slate-800 hover:border-red-800/60 transition-all cursor-pointer"
+                      title={`${athlete.name} 대원 명단에서 삭제`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );

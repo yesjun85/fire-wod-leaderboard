@@ -502,6 +502,7 @@ export default function App() {
             athletes={athletes}
             roomId={roomId}
             onAddAthlete={handleAddAthlete}
+            onRemoveAthlete={handleRemoveAthlete}
             onSelectAthlete={(id) => {
               setSelectedAthleteId(id);
               setViewMode('mobile');
@@ -522,6 +523,7 @@ export default function App() {
             onResetTimer={resetTimer}
             onAthleteComplete={handleAthleteComplete}
             onAthleteReset={handleAthleteReset}
+            onRemoveAthlete={handleRemoveAthlete}
             onOpenAddAthlete={() => setIsAddAthleteOpen(true)}
             onOpenAIModal={() => setIsAIModalOpen(true)}
             onTriggerAlarm={() => setIsSirenOpen(true)}
@@ -538,6 +540,7 @@ export default function App() {
             onSelectAthlete={setSelectedAthleteId}
             onAthleteComplete={handleAthleteComplete}
             onAthleteReset={handleAthleteReset}
+            onRemoveAthlete={handleRemoveAthlete}
             onUpdateAmrapScore={handleUpdateAmrapScore}
             onStartTimer={startTimer}
             onPauseTimer={pauseTimer}
