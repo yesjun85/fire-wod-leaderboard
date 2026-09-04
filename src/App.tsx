@@ -41,7 +41,7 @@ export default function App() {
 
   // 1. Settings state with localStorage persistence
   const [settings, setSettings] = useState<AppSettings>(() => {
-    const savedKey = localStorage.getItem('fire_wod_gemini_key') || '';
+    const savedKey = localStorage.getItem('fire_wod_gemini_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
     const savedStation = localStorage.getItem('fire_wod_station_name') || '119 안전센터 체력단련실';
     const savedSound = localStorage.getItem('fire_wod_sound_enabled') !== 'false';
     const savedVol = parseFloat(localStorage.getItem('fire_wod_sound_volume') || '0.8');
